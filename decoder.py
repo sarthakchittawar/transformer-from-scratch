@@ -16,10 +16,10 @@ class DecoderLayer(torch.nn.Module):
         self.layernorm2 = torch.nn.LayerNorm(d_model)
         self.layernorm3 = torch.nn.LayerNorm(d_model)
 
-    def forward(self, input, encoder_output):
-        att = self.mha1(input)
+    def forward(self, input, encoder_output, src_mask, tgt_mask):
+        att = self.mha1(input, tgt_mask)
         att = self.layernorm1(input + att)
-        att2 = self.mha2(att, encoder_output)
+        att2 = self.mha2(att, encoder_output, src_mask)
         att2 = self.layernorm2(att + att2)
         ffn = self.ffn(att2)
         output = self.layernorm3(att2 + ffn)
@@ -30,7 +30,7 @@ class Decoder(torch.nn.Module):
         super(Decoder, self).__init__()
         self.layers = torch.nn.ModuleList([DecoderLayer(d_model, n_heads) for _ in range(n_layers)])
 
-    def forward(self, input, encoder_output):
+    def forward(self, input, encoder_output, src_mask, tgt_mask):
         for layer in self.layers:
-            input = layer(input, encoder_output)
+            input = layer(input, encoder_output, src_mask, tgt_mask)
         return input

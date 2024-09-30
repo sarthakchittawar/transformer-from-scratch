@@ -21,14 +21,34 @@ class Transformer(torch.nn.Module):
         self.eng_embedding = torch.nn.Embedding(len(eng_vocab.keys()), d_model, padding_idx=eng_vocab['<PAD>'], dtype=torch.float32)
         self.fr_embedding = torch.nn.Embedding(len(fr_vocab.keys()), d_model, padding_idx=fr_vocab['<PAD>'], dtype=torch.float32)
 
+    def positional_encoding(self, seq_len, d_model):
+        # TODO: check if this is correct
+        
+        pos = torch.arange(seq_len).unsqueeze(1)
+        i = torch.arange(d_model).unsqueeze(0)
+        angle = pos / 10000 ** (2 * (i // 2) / d_model)
+        pe = torch.zeros(seq_len, d_model)
+        pe[:, 0::2] = torch.sin(angle[:, 0::2])
+        pe[:, 1::2] = torch.cos(angle[:, 1::2])
+        return pe 
+
     def forward(self, src, tgt):
-        # TODO: Implement padding mask
+        # src padding mask wherever src is eng_vocab['<PAD>']
+        src_mask = (src == eng_vocab['<PAD>'])
+        tgt_mask = (tgt == fr_vocab['<PAD>'])
+
+        print(src.shape, src_mask.shape)
+        print(tgt.shape, tgt_mask.shape)
         
         src = self.eng_embedding(src)
         tgt = self.fr_embedding(tgt)
 
-        encoder_output = self.encoder(src)
-        output = self.decoder(tgt, encoder_output)
+        # positional encoding
+        src += self.positional_encoding(src.size(1), src.size(2))
+        tgt += self.positional_encoding(tgt.size(1), tgt.size(2))  
+
+        encoder_output = self.encoder(src, src_mask)
+        output = self.decoder(tgt, encoder_output, src_mask, tgt_mask)
         output = self.linear(output)
         output = self.softmax(output)
 

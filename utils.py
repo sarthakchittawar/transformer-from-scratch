@@ -37,7 +37,7 @@ class MultiHeadAttention(torch.nn.Module):
         return output
     
     # input: batch_size x seq_len x d_model
-    def forward(self, input, encoder_output=None):
+    def forward(self, input, encoder_output=None, padding_mask=None):
         batch_size = input.size(0)
         seq_len = input.size(1)
 
@@ -53,6 +53,8 @@ class MultiHeadAttention(torch.nn.Module):
         q = q.transpose(1, 2)
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
+
+        # TODO: Implement padding mask
 
         output = self.attention(q, k, v)
 

@@ -14,9 +14,9 @@ class EncoderLayer(torch.nn.Module):
         self.layernorm1 = torch.nn.LayerNorm(d_model)
         self.layernorm2 = torch.nn.LayerNorm(d_model)
 
-    def forward(self, input):
+    def forward(self, input, input_mask):
         # print(input.shape)
-        att = self.mha(input)
+        att = self.mha(input, input_mask)
         # print(att.shape)
         att = self.layernorm1(input + att)
         ffn = self.ffn(att)
@@ -28,8 +28,8 @@ class Encoder(torch.nn.Module):
         super(Encoder, self).__init__()
         self.layers = torch.nn.ModuleList([EncoderLayer(d_model, n_heads) for _ in range(n_layers)])
 
-    def forward(self, input):
+    def forward(self, input, input_mask):
         # print(input.shape)
         for layer in self.layers:
-            input = layer(input)
+            input = layer(input, input_mask)
         return input
