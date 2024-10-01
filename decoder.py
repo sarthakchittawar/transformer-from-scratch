@@ -26,9 +26,9 @@ class DecoderLayer(torch.nn.Module):
         return output
     
 class Decoder(torch.nn.Module):
-    def __init__(self, d_model, n_heads, n_layers):
+    def __init__(self, d_model, n_heads, n_layers, ffn_hidden_dim=1024, dropout=0.1):
         super(Decoder, self).__init__()
-        self.layers = torch.nn.ModuleList([DecoderLayer(d_model, n_heads) for _ in range(n_layers)])
+        self.layers = torch.nn.ModuleList([DecoderLayer(d_model, n_heads, ffn_hidden_dim, dropout) for _ in range(n_layers)])
 
     def forward(self, input, encoder_output, src_mask, tgt_mask):
         for layer in self.layers:
