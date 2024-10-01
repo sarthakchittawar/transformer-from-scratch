@@ -20,10 +20,15 @@ class MultiHeadAttention(torch.nn.Module):
     # q, k, v: batch_size x n_heads x seq_len x dim
     def attention(self, q, k, v, mask=None):
         d_k = k.size(-1)
-        scores = q @ k.transpose(-2, -1) / np.sqrt(d_k)
+        scores = q @ k.transpose(-2, -1)
+
         if mask is not None:
-            # TODO: Implement masking
-            pass
+            # scores: batch_size x n_heads x seq_len x seq_len
+            # mask: batch_size x seq_len x seq_len
+            mask = mask.unsqueeze(1)
+            scores += mask
+
+        scores = self.softmax(scores / np.sqrt(d_k))
 
         # multiply with value
         output = scores @ v
@@ -37,7 +42,7 @@ class MultiHeadAttention(torch.nn.Module):
         return output
     
     # input: batch_size x seq_len x d_model
-    def forward(self, input, encoder_output=None, padding_mask=None):
+    def forward(self, input, encoder_output=None, padding_mask=None, add_decoder_mask=False):
         batch_size = input.size(0)
         seq_len = input.size(1)
 
@@ -54,8 +59,19 @@ class MultiHeadAttention(torch.nn.Module):
         k = k.transpose(1, 2)
         v = v.transpose(1, 2)
 
-        # TODO: Implement padding mask
+        # padding mask shape: batch_size x seq_len
+        if padding_mask is not None:
+            mask = padding_mask.unsqueeze(1).repeat(1, seq_len, 1)
+            mask *= float('-inf')
+            mask = torch.nan_to_num(mask, nan=0.0, neginf=float('-inf'))
+        else:
+            mask = None
 
-        output = self.attention(q, k, v)
+        if add_decoder_mask:
+            decoder_mask = torch.triu(torch.ones(batch_size, seq_len, seq_len), diagonal=1).to(input.device)
+
+            mask += decoder_mask
+
+        output = self.attention(q, k, v, mask)
 
         return output

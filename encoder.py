@@ -2,21 +2,21 @@ import torch
 from utils import MultiHeadAttention
 
 class EncoderLayer(torch.nn.Module):
-    def __init__(self, d_model, n_heads):
+    def __init__(self, d_model, n_heads, ffn_hidden_dim=1024, dropout=0.1):
         super(EncoderLayer, self).__init__()
         self.mha = MultiHeadAttention(d_model, n_heads, d_model // n_heads, d_model // n_heads)
         self.ffn = torch.nn.Sequential(
-            torch.nn.Linear(d_model, 1024),
+            torch.nn.Linear(d_model, ffn_hidden_dim),
             torch.nn.ReLU(),
-            torch.nn.Linear(1024, d_model),
-            torch.nn.Dropout(0.1)
+            torch.nn.Linear(ffn_hidden_dim, d_model),
+            torch.nn.Dropout(dropout)
         )
         self.layernorm1 = torch.nn.LayerNorm(d_model)
         self.layernorm2 = torch.nn.LayerNorm(d_model)
 
     def forward(self, input, input_mask):
         # print(input.shape)
-        att = self.mha(input, input_mask)
+        att = self.mha(input, padding_mask=input_mask)
         # print(att.shape)
         att = self.layernorm1(input + att)
         ffn = self.ffn(att)

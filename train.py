@@ -11,46 +11,40 @@ from torch.utils.data import DataLoader, TensorDataset
 nltk.download('punkt')
 
 class Transformer(torch.nn.Module):
-    def __init__(self, d_model, n_heads, n_layers, eng_vocab, fr_vocab):
+    def __init__(self, d_model, n_heads, n_layers, eng_vocab, fr_vocab, ffn_hidden_dim=1024, dropout_rate=0.1, device='cpu'):
         super(Transformer, self).__init__()
-        self.encoder = Encoder(d_model, n_heads, n_layers)
-        self.decoder = Decoder(d_model, n_heads, n_layers)
+        self.encoder = Encoder(d_model, n_heads, n_layers, ffn_hidden_dim, dropout_rate)
+        self.decoder = Decoder(d_model, n_heads, n_layers, ffn_hidden_dim, dropout_rate)
         self.linear = torch.nn.Linear(d_model, len(fr_vocab.keys()))
-        self.softmax = torch.nn.Softmax(dim=-1)
 
         self.eng_embedding = torch.nn.Embedding(len(eng_vocab.keys()), d_model, padding_idx=eng_vocab['<PAD>'], dtype=torch.float32)
         self.fr_embedding = torch.nn.Embedding(len(fr_vocab.keys()), d_model, padding_idx=fr_vocab['<PAD>'], dtype=torch.float32)
 
-    def positional_encoding(self, seq_len, d_model):
-        # TODO: check if this is correct
-        
-        pos = torch.arange(seq_len).unsqueeze(1)
-        i = torch.arange(d_model).unsqueeze(0)
+        self.device = device
+
+    def positional_encoding(self, seq_len, d_model):        
+        pos = torch.arange(seq_len, device=self.device).unsqueeze(1)
+        i = torch.arange(d_model, device=self.device).unsqueeze(0)
         angle = pos / 10000 ** (2 * (i // 2) / d_model)
-        pe = torch.zeros(seq_len, d_model)
+        pe = torch.zeros(seq_len, d_model, device=self.device)
         pe[:, 0::2] = torch.sin(angle[:, 0::2])
         pe[:, 1::2] = torch.cos(angle[:, 1::2])
         return pe 
 
     def forward(self, src, tgt):
-        # src padding mask wherever src is eng_vocab['<PAD>']
-        src_mask = (src == eng_vocab['<PAD>'])
-        tgt_mask = (tgt == fr_vocab['<PAD>'])
-
-        print(src.shape, src_mask.shape)
-        print(tgt.shape, tgt_mask.shape)
-        
+        src_mask = (src == eng_vocab['<PAD>']).float()
+        tgt_mask = (tgt == fr_vocab['<PAD>']).float()
+                
         src = self.eng_embedding(src)
         tgt = self.fr_embedding(tgt)
 
         # positional encoding
         src += self.positional_encoding(src.size(1), src.size(2))
-        tgt += self.positional_encoding(tgt.size(1), tgt.size(2))  
+        tgt += self.positional_encoding(tgt.size(1), tgt.size(2))
 
         encoder_output = self.encoder(src, src_mask)
         output = self.decoder(tgt, encoder_output, src_mask, tgt_mask)
         output = self.linear(output)
-        output = self.softmax(output)
 
         # reshape the output to batch_size x emb_dim x seq_len
         output = output.transpose(1, 2)
@@ -59,9 +53,7 @@ class Transformer(torch.nn.Module):
         
     
 def clean_text(text):
-    # Lowercase the text
     text = text.lower()
-    # Remove the punctuation
     text = re.sub(r'[^\w\s]', '', text)
     return text
 
@@ -87,12 +79,15 @@ def create_data_loader(eng_sequences, fr_sequences, eng_vocab, fr_vocab, batch_s
     max_len_eng = max([len(sentence) for sentence in eng_sequences])
     max_len_fr = max([len(sentence) for sentence in fr_sequences])
 
+    print("Max length of English sentences:", max_len_eng)
+    print("Max length of French sentences:", max_len_fr)
+
     eng_padded = []
     fr_padded = []
 
     for eng_seq, fr_seq in zip(eng_sequences, fr_sequences):
-        eng_padded.append(eng_seq + [eng_vocab['<PAD>']] * (512 - len(eng_seq)))
-        fr_padded.append(fr_seq + [fr_vocab['<PAD>']] * (512 - len(fr_seq)))
+        eng_padded.append(eng_seq + [eng_vocab['<PAD>']] * (128 - len(eng_seq)))
+        fr_padded.append(fr_seq + [fr_vocab['<PAD>']] * (128 - len(fr_seq)))
 
     eng_tensor = torch.tensor(eng_padded)
     fr_tensor = torch.tensor(fr_padded)
@@ -102,15 +97,18 @@ def create_data_loader(eng_sequences, fr_sequences, eng_vocab, fr_vocab, batch_s
 
     return data_loader
 
-def train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.001):
+def train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, device='cpu'):
+    model.to(device)
+    
     optimizer = torch.optim.Adam(model.parameters(), lr=lr)
     criterion = torch.nn.CrossEntropyLoss(ignore_index=fr_vocab['<PAD>'])
 
     for epoch in tqdm(range(num_epochs)):
         model.train()
         for i, (eng, fr) in enumerate(train_loader):
+            eng, fr = eng.to(device), fr.to(device)
             optimizer.zero_grad()
-            output = model(eng, fr)     
+            output = model(eng, fr)
             loss = criterion(output, fr)
             loss.backward()
             optimizer.step()
@@ -121,6 +119,7 @@ def train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.001):
         with torch.no_grad():
             total_loss = 0
             for i, (eng, fr) in enumerate(val_loader):
+                eng, fr = eng.to(device), fr.to(device)
                 output = model(eng, fr)
                 loss = criterion(output, fr)
                 total_loss += loss.item()
@@ -130,49 +129,64 @@ def train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.001):
     
 # unit testing for Encoder & Decoder
 
-eng = open('ted-talks-corpus/train.en', 'r')
-fr = open('ted-talks-corpus/train.fr', 'r')
+eng_train = open('ted-talks-corpus/train.en', 'r')
+fr_train = open('ted-talks-corpus/train.fr', 'r')
+eng_val = open('ted-talks-corpus/dev.en', 'r')
+fr_val = open('ted-talks-corpus/dev.fr', 'r')
 
-eng_lines = eng.readlines()
-fr_lines = fr.readlines()
+eng_train_lines = eng_train.readlines()
+fr_train_lines = fr_train.readlines()
 
-eng.close()
-fr.close()
+eng_val_lines = eng_val.readlines()
+fr_val_lines = fr_val.readlines()
+
+eng_train.close()
+fr_train.close()
 
 # Tokenize the English and French sentences
-eng_lines = [line.strip() for line in eng_lines]
-fr_lines = [line.strip() for line in fr_lines]
+eng_train_lines = [line.strip() for line in eng_train_lines]
+fr_train_lines = [line.strip() for line in fr_train_lines]
+eng_val_lines = [line.strip() for line in eng_val_lines]
+fr_val_lines = [line.strip() for line in fr_val_lines]
 
-tokenized_eng = [word_tokenize(clean_text(sentence)) for sentence in eng_lines]
-tokenized_fr = [word_tokenize(clean_text(sentence)) for sentence in fr_lines]
+tokenized_train_eng = [word_tokenize(clean_text(sentence)) for sentence in eng_train_lines]
+tokenized_train_fr = [word_tokenize(clean_text(sentence)) for sentence in fr_train_lines]
+tokenized_val_eng = [word_tokenize(clean_text(sentence)) for sentence in eng_val_lines]
+tokenized_val_fr = [word_tokenize(clean_text(sentence)) for sentence in fr_val_lines]
 
-print(tokenized_eng[87])
-print(tokenized_fr[87])
+print(tokenized_train_eng[87])
+print(tokenized_train_fr[87])
 
 # Build the vocabulary
-eng_vocab = build_vocab(tokenized_eng)
-fr_vocab = build_vocab(tokenized_fr)
+eng_vocab = build_vocab(tokenized_train_eng)
+fr_vocab = build_vocab(tokenized_train_fr)
 
 # Convert the sentences to indices
-eng_sentences = [sentence_to_indices(sentence, eng_vocab) for sentence in tokenized_eng]
-fr_sentences = [sentence_to_indices(sentence, fr_vocab) for sentence in tokenized_fr]
+train_eng = [sentence_to_indices(sentence, eng_vocab) for sentence in tokenized_train_eng]
+train_fr = [sentence_to_indices(sentence, fr_vocab) for sentence in tokenized_train_fr]
+
+val_eng = [sentence_to_indices(sentence, eng_vocab) for sentence in tokenized_val_eng]
+val_fr = [sentence_to_indices(sentence, fr_vocab) for sentence in tokenized_val_fr]
 
 # print("Ignoring sentences with length less than 5 or greater than 20...")
 # tokenized_eng_sentences = [sentence for sentence in tokenized_eng if 20 >= len(sentence) >= 5]
 # tokenized_fr_sentences = [sentence for sentence in tokenized_fr if 20 >= len(sentence) >= 5]
-
-# Split the data into training and validation sets
-train_eng, val_eng, train_fr, val_fr = train_test_split(eng_sentences, fr_sentences, test_size=0.2)
+train_eng = [sentence for sentence in train_eng if 128 >= len(sentence) >= 5]
+train_fr = [sentence for sentence in train_fr if 128 >= len(sentence) >= 5]
+val_eng = [sentence for sentence in val_eng if 128 >= len(sentence) >= 5]
+val_fr = [sentence for sentence in val_fr if 128 >= len(sentence) >= 5]
 
 print("Number of training samples:", len(train_eng))
 print("Number of validation samples:", len(val_eng))
 
 # Create the data loaders
-train_loader = create_data_loader(train_eng, train_fr, eng_vocab, fr_vocab)
-val_loader = create_data_loader(val_eng, val_fr, eng_vocab, fr_vocab)
+train_loader = create_data_loader(train_eng, train_fr, eng_vocab, fr_vocab, batch_size=64)
+val_loader = create_data_loader(val_eng, val_fr, eng_vocab, fr_vocab, batch_size=64)
+
+device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 
 # Initialize the model
-model = Transformer(512, 8, 6, eng_vocab, fr_vocab)
+model = Transformer(512, 8, 6, eng_vocab, fr_vocab, device)
 
 # Train the model
-model = train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.001)
+model = train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, device=device)
