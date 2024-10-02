@@ -106,36 +106,83 @@ if __name__ == '__main__':
 
     idx2word = {idx: word for word, idx in fr_vocab.items()}
 
-    # translate the test sentences until EOS token is generated, also calculate the BLEU score (start with <SOS> token)
     model.eval()
     bleu_scores = []
-    for i, (eng, fr) in enumerate(test_loader):
-        eng = eng.to(device)
-        fr = fr.to(device)
+    for src, tgt in test_loader:
+        src = src.to(device)
+        tgt = tgt.to(device)
 
-        # decoder_input = torch.tensor([fr_vocab['<SOS>']], device=device).unsqueeze(0)
-        decoder_input = [fr_vocab['<PAD>'] for _ in range(128)]
-        decoder_input[0] = fr_vocab['<SOS>']
-        decoder_input = torch.tensor(decoder_input, device=device).unsqueeze(0)
-        for i in range(128):
-            print(eng, decoder_input)
-            output = model(eng, decoder_input)
-            output = output.argmax(dim=-1)
-            decoder_input = torch.cat((decoder_input, output[:, -1].unsqueeze(0)), dim=1)
-            if output[:, -1].item() == fr_vocab['<EOS>']:
+        src_mask = (src == eng_vocab['<PAD>']).float()
+        tgt_mask = (tgt == fr_vocab['<PAD>']).float()
+                
+        src = model.eng_embedding(src)
+        tgt = model.fr_embedding(tgt)
+
+        # positional encoding
+        src += model.positional_encoding(src.size(1), src.size(2))
+        tgt += model.positional_encoding(tgt.size(1), tgt.size(2))
+
+        encoder_output = model.encoder(src, src_mask)
+
+        output = torch.tensor([fr_vocab['<SOS>']], device=device).unsqueeze(0)
+
+        for _ in range(128):
+            tgt_mask = (output == fr_vocab['<PAD>']).float()
+            tgt = model.fr_embedding(output)
+
+            decoder_output = model.decoder(tgt, encoder_output, src_mask, tgt_mask)
+            output = model.linear(decoder_output)
+            output = torch.argmax(output, dim=-1)
+
+            if output[0].item() == fr_vocab['<EOS>']:
                 break
 
-        # calculate the BLEU score
-        fr = fr.squeeze(0).cpu().numpy()
-        decoder_input = decoder_input.squeeze(0).cpu().numpy()
-        fr = [idx2word[idx] for idx in fr]
-        decoder_input = [idx2word[idx] for idx in decoder_input]
+        output = output.squeeze(0).cpu().numpy()
 
-        bleu_score = sentence_bleu([fr], decoder_input)
+        tgt = tgt.squeeze(0).cpu().numpy()
+
+        output = [idx2word[idx] for idx in output]
+        tgt = [idx2word[idx] for idx in tgt]
+
+        bleu_score = sentence_bleu([tgt], output)
         bleu_scores.append(bleu_score)
 
-        print("Test sentence:", ' '.join([idx2word[idx] for idx in eng.squeeze(0).cpu().numpy()]))
-        print("Actual translation:", ' '.join([idx2word[idx] for idx in fr]))
-        print("Predicted translation:", ' '.join([idx2word[idx] for idx in decoder_input]))
+        print("English:", ' '.join([idx2word[idx] for idx in src.squeeze(0).cpu().numpy()]))
+        print("Predicted:", ' '.join(output))
+        print("True:", ' '.join(tgt))
         print("BLEU score:", bleu_score)
-        print()
+        print()        
+
+    # model.eval()
+    
+    
+    # src_tokens = ['<sos>'] + src_tokenizer(src_sentence)[:max_length-2] + ['<eos>']
+    
+    
+    # src_indices = [src_vocab[token] for token in src_tokens]
+    # src_tensor = torch.tensor(src_indices).unsqueeze(0).to(device)
+    
+    # src_mask = (src_tensor != 0).unsqueeze(1).unsqueeze(2)
+    
+    # encoder_output = model.encoder(src_tensor, src_mask)
+
+    # tgt_tensor = torch.tensor([tgt_vocab['<sos>']]).unsqueeze(0).to(device)
+    
+    # for _ in tqdm(range(max_length)):
+    #     tgt_mask = (tgt_tensor != 0).unsqueeze(1).unsqueeze(3)
+    #     seq_length = tgt_tensor.size(1)
+
+    #     tgt_mask = torch.ones(1, 1, seq_length, seq_length).to(device).bool()
+        
+    #     decoder_output = model.decoder(tgt_tensor, encoder_output, src_mask, tgt_mask)
+    #     output = model.fc(decoder_output[:, -1])
+    #     _, predicted = torch.max(output, dim=1)
+        
+    #     tgt_tensor = torch.cat([tgt_tensor, predicted.unsqueeze(0)], dim=1)
+        
+    #     if predicted.item() == tgt_vocab['<eos>']:
+    #         break
+    
+    
+    # translated_tokens = [tgt_vocab.itos[idx.item()] for idx in tgt_tensor[0][1:]]
+    # return ' '.join(translated_tokens[:-1])
