@@ -96,7 +96,7 @@ if __name__ == '__main__':
     test_eng = [sentence for sentence in test_eng if 128 >= len(sentence) >= 5]
     test_fr = [sentence for sentence in test_fr if 128 >= len(sentence) >= 5]
 
-    print("Number of testidation samples:", len(test_eng))
+    print("Number of test samples:", len(test_eng))
 
     test_loader = create_data_loader(test_eng, test_fr, eng_vocab, fr_vocab, batch_size=1)
 
@@ -106,52 +106,87 @@ if __name__ == '__main__':
 
     idx2word = {idx: word for word, idx in fr_vocab.items()}
 
+    idx2word_eng = {idx: word for word, idx in eng_vocab.items()}
+
+    f = open('test_bleu.txt', 'w')
+
     model.eval()
-    bleu_scores = []
-    for src, tgt in test_loader:
-        src = src.to(device)
-        tgt = tgt.to(device)
+    with torch.no_grad():
+        bleu_scores = []
+        for src, tgt in test_loader:
+            src = src.to(device)
+            tgt = tgt.to(device)
 
-        src_mask = (src == eng_vocab['<PAD>']).float()
-        tgt_mask = (tgt == fr_vocab['<PAD>']).float()
-                
-        src = model.eng_embedding(src)
-        tgt = model.fr_embedding(tgt)
+            output = model(src, tgt)
+            output = output.argmax(dim=1)
+            output = output.squeeze(0).tolist()
+            tgt = tgt.squeeze(0).tolist()
 
-        # positional encoding
-        src += model.positional_encoding(src.size(1), src.size(2))
-        tgt += model.positional_encoding(tgt.size(1), tgt.size(2))
+            output = [idx2word.get(idx, '<UNK>') for idx in output if idx != fr_vocab['<PAD>'] and idx != fr_vocab['<SOS>']]
+            tgt = [idx2word.get(idx, '<UNK>') for idx in tgt if idx != fr_vocab['<PAD>'] and idx != fr_vocab['<SOS>']]
 
-        encoder_output = model.encoder(src, src_mask)
+            # if '<EOS>' in output:
+            #     output = output[:output.index('<EOS>')]
+            # if '<EOS>' in tgt:
+            #     tgt = tgt[:tgt.index('<EOS>')]
+            print('English:', ' '.join([idx2word_eng.get(idx, '<UNK>') for idx in src.squeeze(0).tolist() if idx != eng_vocab['<PAD>'] and idx != eng_vocab['<SOS>'] and idx != eng_vocab['<EOS>']]))
+            print('Generated:', ' '.join(output))
+            print('Target:', ' '.join(tgt))
 
-        output = torch.tensor([fr_vocab['<SOS>']], device=device).unsqueeze(0)
+            bleu_score = sentence_bleu([tgt], output)
+            bleu_scores.append(bleu_score)
+            print('BLEU score:', bleu_score)
+            print()
 
-        for _ in range(128):
-            tgt_mask = (output == fr_vocab['<PAD>']).float()
-            tgt = model.fr_embedding(output)
+            f.write(str(bleu_score))
+            f.write('\n')
 
-            decoder_output = model.decoder(tgt, encoder_output, src_mask, tgt_mask)
-            output = model.linear(decoder_output)
-            output = torch.argmax(output, dim=-1)
+        print('Average BLEU score:', sum(bleu_scores) / len(bleu_scores))
 
-            if output[0].item() == fr_vocab['<EOS>']:
-                break
+    f.close()
 
-        output = output.squeeze(0).cpu().numpy()
+            
 
-        tgt = tgt.squeeze(0).cpu().numpy()
+            # generated = [fr_vocab['<PAD>'] for _ in range(128)]
+            # generated[0] = fr_vocab['<SOS>']
+            # generated[1] = tgt[0][1]
+            # generated = torch.tensor(generated).unsqueeze(0).to(device)
 
-        output = [idx2word[idx] for idx in output]
-        tgt = [idx2word[idx] for idx in tgt]
+            # print(generated)
 
-        bleu_score = sentence_bleu([tgt], output)
-        bleu_scores.append(bleu_score)
+            # for i in range(2, tgt.size(1)):
+            #     # print('Generated:', generated)
+            #     output = model(src, generated)
+            #     output = output.argmax(dim=1)
+            #     # print(output[0][i])
+            #     generated[0][i] = output[0][i]
 
-        print("English:", ' '.join([idx2word[idx] for idx in src.squeeze(0).cpu().numpy()]))
-        print("Predicted:", ' '.join(output))
-        print("True:", ' '.join(tgt))
-        print("BLEU score:", bleu_score)
-        print()        
+            #     if output[0][i] == fr_vocab['<EOS>']:
+            #         break
+
+            # generated = generated.squeeze(0).tolist()
+            # tgt = tgt.squeeze(0).tolist()
+
+            # generated = [idx2word.get(idx, '<UNK>') for idx in generated if idx != fr_vocab['<PAD>'] and idx != fr_vocab['<SOS>']]
+            # tgt = [idx2word.get(idx, '<UNK>') for idx in tgt if idx != fr_vocab['<PAD>'] and idx != fr_vocab['<SOS>']]
+
+            # # print(generated)
+            # # print(tgt)
+
+            # if '<EOS>' in generated:
+            #     generated = generated[:generated.index('<EOS>')]
+            # if '<EOS>' in tgt:
+            #     tgt = tgt[:tgt.index('<EOS>')]
+
+            # print('English:', ' '.join([idx2word_eng.get(idx, '<UNK>') for idx in src.squeeze(0).tolist() if idx != eng_vocab['<PAD>'] and idx != eng_vocab['<SOS>'] and idx != eng_vocab['<EOS>']]))
+            # print('Generated:', ' '.join(generated))
+            # print('Target:', ' '.join(tgt))
+
+            # bleu_score = sentence_bleu([tgt], generated)
+            # bleu_scores.append(bleu_score)
+            # print('BLEU score:', bleu_score)
+            # print()
+
 
     # model.eval()
     

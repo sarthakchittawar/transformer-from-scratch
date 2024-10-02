@@ -3,10 +3,18 @@ import torch
 import numpy as np
 from torch.utils.data import DataLoader, TensorDataset
 
-def clean_text(text):
-    text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text)
-    return text
+def clean_text(t):
+    # cleaning
+    t = re.sub(r'(((http|https):\/\/)|www\.)([a-zA-Z0-9]+\.){0,2}[a-zA-Z0-9]+([a-zA-Z0-9\/#%&=\?_\.\-\+]+)', "", t)
+    t = re.sub(r'(@[a-zA-Z0-9_]+)', "", t)
+    t = re.sub(r'(#[a-zA-Z0-9_]+\b)', "", t)
+    t = re.sub(r'\d+', "",t)
+    t = re.sub(r'--'," ",t)
+    # special characters
+    t = re.sub(r'[\_\$\*\^\(\)\[\]\{\}\=\+\<\>",\&\%\-\—\”\“\–\\\.\?\!;]'," ",t)
+    t=re.sub(r'\n'," ",t)
+    t=t.lower()
+    return t
 
 def build_vocab(sentences):
     vocab = {}
@@ -109,13 +117,12 @@ class MultiHeadAttention(torch.nn.Module):
         # padding mask shape: batch_size x seq_len
         if padding_mask is not None:
             mask = padding_mask.unsqueeze(1).repeat(1, seq_len, 1)
-            mask *= float('-inf')
-            mask = torch.nan_to_num(mask, nan=0.0, neginf=float('-inf'))
+            mask *= -1e9
         else:
             mask = None
 
         if add_decoder_mask:
-            decoder_mask = torch.triu(torch.ones(batch_size, seq_len, seq_len), diagonal=1).to(input.device)
+            decoder_mask = torch.triu(torch.ones(batch_size, seq_len, seq_len) * -1e9, diagonal=1).to(input.device)
 
             mask += decoder_mask
 

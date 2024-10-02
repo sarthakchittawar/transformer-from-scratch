@@ -84,54 +84,62 @@ def train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, d
         
         model.eval()
         with torch.no_grad():
-            total_loss = 0
             bleu_scores = []
-            rouge_scores = []
-            for i, (eng, fr) in enumerate(val_loader):
+            total_loss = 0
+
+            for eng, fr in val_loader:
                 eng, fr = eng.to(device), fr.to(device)
+                
+                generated = torch.ones(fr.size(0), fr.size(1)).long().to(device)
+                generated *= fr_vocab['<PAD>']
+                generated[:, 0] = fr_vocab['<SOS>']
+
+                for i in range(1, fr.size(1)):
+                    output = model(eng, generated)
+                    output = output.argmax(dim=1)
+                    generated[:, i] = output[:, i]
+
                 output = model(eng, fr)
                 loss = criterion(output, fr)
                 total_loss += loss.item()
 
-                # Calculate BLEU and ROUGE scores
-                output_indices = output.argmax(dim=1).cpu().numpy()
-                fr_indices = fr.cpu().numpy()
-                for j in range(len(output_indices)):
-                    pred_sentence = [fr_vocab_inv.get(idx, '<UNK>') for idx in output_indices[j] if idx != fr_vocab['<PAD>']]
-                    true_sentence = [fr_vocab_inv.get(idx, '<UNK>') for idx in fr_indices[j] if idx != fr_vocab['<PAD>']]
-                    bleu_scores.append(sentence_bleu([true_sentence], pred_sentence))
-                    rouge_scores.append(rouge.get_scores(' '.join(pred_sentence), ' '.join(true_sentence))[0])
+                
+                for i in range(fr.size(0)):
+                    generated_sentence = [fr_vocab_inv[idx] for idx in generated[i].tolist() if idx != fr_vocab['<PAD>'] and idx != fr_vocab['<SOS>']]
+                    target_sentence = [fr_vocab_inv[idx] for idx in fr[i].tolist() if idx != fr_vocab['<PAD>'] and idx != fr_vocab['<SOS>']]
+                    if '<EOS>' in generated_sentence:
+                        generated_sentence = generated_sentence[:generated_sentence.index('<EOS>')]
+                    if '<EOS>' in target_sentence:
+                        target_sentence = target_sentence[:target_sentence.index('<EOS>')]
+                    bleu_score = sentence_bleu([target_sentence], generated_sentence)
+                    bleu_scores.append(bleu_score)
+
+                    print('Generated:', ' '.join(generated_sentence))
+                    print('Target:', ' '.join(target_sentence))
+                    print('BLEU Score:', bleu_score)
 
             avg_bleu = sum(bleu_scores) / len(bleu_scores)
-            avg_rouge = {
-                'rouge-1': sum([score['rouge-1']['f'] for score in rouge_scores]) / len(rouge_scores),
-                'rouge-2': sum([score['rouge-2']['f'] for score in rouge_scores]) / len(rouge_scores),
-                'rouge-l': sum([score['rouge-l']['f'] for score in rouge_scores]) / len(rouge_scores)
-            }
 
-            print(f'Epoch: {epoch+1}, Validation Loss: {total_loss / len(val_loader)}, BLEU Score: {avg_bleu}, ROUGE Scores: {avg_rouge}')
+            print(f'Epoch: {epoch+1}, Train Loss: {train_loss}, Validation Loss: {total_loss / len(val_loader)}, BLEU Score: {avg_bleu}')
 
             if wandb.run:  
                 wandb.log({
                     'train_loss': train_loss,
                     'val_loss': total_loss / len(val_loader),
                     'bleu_score': avg_bleu,
-                    'rouge-1': avg_rouge['rouge-1'],
-                    'rouge-2': avg_rouge['rouge-2'],
-                    'rouge-l': avg_rouge['rouge-l'],
                     'epoch': epoch+1
                 })
     
 
-    return model, avg_bleu, avg_rouge, train_loss, total_loss / len(val_loader)
+    return model, avg_bleu, None, train_loss, total_loss / len(val_loader)
     
 # unit testing for Encoder & Decoder
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser()
     parser.add_argument('--d_model', type=int, default=512)
-    parser.add_argument('--n_heads', type=int, default=8)
-    parser.add_argument('--n_layers', type=int, default=6)
+    parser.add_argument('--n_heads', type=int, default=4)
+    parser.add_argument('--n_layers', type=int, default=2)
     parser.add_argument('--dropout_rate', type=float, default=0.1)
     parser.add_argument('--device', type=str, default='cpu')
     parser.add_argument('--index', type=int, default=0)
