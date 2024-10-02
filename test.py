@@ -1,12 +1,59 @@
 import torch
 import nltk
 import argparse
+from encoder import Encoder
+from decoder import Decoder
 from nltk.tokenize import word_tokenize
 from nltk.translate.bleu_score import sentence_bleu
 
 from utils import clean_text, build_vocab, sentence_to_indices, create_data_loader
 
 nltk.download('punkt')
+
+class Transformer(torch.nn.Module):
+    def __init__(self, d_model, n_heads, n_layers, eng_vocab, fr_vocab, ffn_hidden_dim=1024, dropout_rate=0.1, device='cpu'):
+        super(Transformer, self).__init__()
+        self.encoder = Encoder(d_model, n_heads, n_layers, ffn_hidden_dim, dropout_rate)
+        self.decoder = Decoder(d_model, n_heads, n_layers, ffn_hidden_dim, dropout_rate)
+        self.linear = torch.nn.Linear(d_model, len(fr_vocab.keys()))
+
+        self.eng_embedding = torch.nn.Embedding(len(eng_vocab.keys()), d_model, padding_idx=eng_vocab['<PAD>'], dtype=torch.float32)
+        self.fr_embedding = torch.nn.Embedding(len(fr_vocab.keys()), d_model, padding_idx=fr_vocab['<PAD>'], dtype=torch.float32)
+
+        self.device = device
+        self.d_model = d_model
+        self.n_layers = n_layers
+        self.n_heads = n_heads
+        self.dropout_rate = dropout_rate
+
+    def positional_encoding(self, seq_len, d_model):        
+        pos = torch.arange(seq_len, device=self.device).unsqueeze(1)
+        i = torch.arange(d_model, device=self.device).unsqueeze(0)
+        angle = pos / 10000 ** (2 * (i // 2) / d_model)
+        pe = torch.zeros(seq_len, d_model, device=self.device)
+        pe[:, 0::2] = torch.sin(angle[:, 0::2])
+        pe[:, 1::2] = torch.cos(angle[:, 1::2])
+        return pe 
+
+    def forward(self, src, tgt):
+        src_mask = (src == eng_vocab['<PAD>']).float()
+        tgt_mask = (tgt == fr_vocab['<PAD>']).float()
+                
+        src = self.eng_embedding(src)
+        tgt = self.fr_embedding(tgt)
+
+        # positional encoding
+        src += self.positional_encoding(src.size(1), src.size(2))
+        tgt += self.positional_encoding(tgt.size(1), tgt.size(2))
+
+        encoder_output = self.encoder(src, src_mask)
+        output = self.decoder(tgt, encoder_output, src_mask, tgt_mask)
+        output = self.linear(output)
+
+        # reshape the output to batch_size x emb_dim x seq_len
+        output = output.transpose(1, 2)
+        
+        return output
 
 def test(model, test_loader, fr_vocab, device='cpu'):
     model.to(device)
