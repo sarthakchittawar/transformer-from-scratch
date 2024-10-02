@@ -1,5 +1,6 @@
 import torch
 import nltk
+import argparse
 from nltk.tokenize import word_tokenize
 from nltk.translate.bleu_score import sentence_bleu
 
@@ -43,47 +44,53 @@ def test(model, test_loader, fr_vocab, device='cpu'):
 
     return total_loss / len(test_loader), avg_bleu
 
-eng_train = open('ted-talks-corpus/train.en', 'r')
-fr_train = open('ted-talks-corpus/train.fr', 'r')
-eng_test = open('ted-talks-corpus/test.en', 'r')
-fr_test = open('ted-talks-corpus/test.fr', 'r')
+if __name__ == '__main__':
 
-eng_train_lines = eng_train.readlines()
-fr_train_lines = fr_train.readlines()
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--model', type=str, required=True)
+    args = parser.parse_args()
 
-eng_test_lines = eng_test.readlines()
-fr_test_lines = fr_test.readlines()
+    eng_train = open('ted-talks-corpus/train.en', 'r')
+    fr_train = open('ted-talks-corpus/train.fr', 'r')
+    eng_test = open('ted-talks-corpus/test.en', 'r')
+    fr_test = open('ted-talks-corpus/test.fr', 'r')
 
-eng_train.close()
-fr_train.close()
+    eng_train_lines = eng_train.readlines()
+    fr_train_lines = fr_train.readlines()
 
-# Tokenize the English and French sentences
-eng_train_lines = [line.strip() for line in eng_train_lines]
-fr_train_lines = [line.strip() for line in fr_train_lines]
-eng_test_lines = [line.strip() for line in eng_test_lines]
-fr_test_lines = [line.strip() for line in fr_test_lines]
+    eng_test_lines = eng_test.readlines()
+    fr_test_lines = fr_test.readlines()
 
-tokenized_train_eng = [word_tokenize(clean_text(sentence)) for sentence in eng_train_lines]
-tokenized_train_fr = [word_tokenize(clean_text(sentence), language="french") for sentence in fr_train_lines]
-tokenized_test_eng = [word_tokenize(clean_text(sentence)) for sentence in eng_test_lines]
-tokenized_test_fr = [word_tokenize(clean_text(sentence), language="french") for sentence in fr_test_lines]
+    eng_train.close()
+    fr_train.close()
 
-# Build the vocabulary
-eng_vocab = build_vocab(tokenized_train_eng)
-fr_vocab = build_vocab(tokenized_train_fr)
+    # Tokenize the English and French sentences
+    eng_train_lines = [line.strip() for line in eng_train_lines]
+    fr_train_lines = [line.strip() for line in fr_train_lines]
+    eng_test_lines = [line.strip() for line in eng_test_lines]
+    fr_test_lines = [line.strip() for line in fr_test_lines]
 
-test_eng = [sentence_to_indices(sentence, eng_vocab) for sentence in tokenized_test_eng]
-test_fr = [sentence_to_indices(sentence, fr_vocab) for sentence in tokenized_test_fr]
+    tokenized_train_eng = [word_tokenize(clean_text(sentence)) for sentence in eng_train_lines]
+    tokenized_train_fr = [word_tokenize(clean_text(sentence), language="french") for sentence in fr_train_lines]
+    tokenized_test_eng = [word_tokenize(clean_text(sentence)) for sentence in eng_test_lines]
+    tokenized_test_fr = [word_tokenize(clean_text(sentence), language="french") for sentence in fr_test_lines]
 
-test_eng = [sentence for sentence in test_eng if 128 >= len(sentence) >= 5]
-test_fr = [sentence for sentence in test_fr if 128 >= len(sentence) >= 5]
+    # Build the vocabulary
+    eng_vocab = build_vocab(tokenized_train_eng)
+    fr_vocab = build_vocab(tokenized_train_fr)
 
-print("Number of testidation samples:", len(test_eng))
+    test_eng = [sentence_to_indices(sentence, eng_vocab) for sentence in tokenized_test_eng]
+    test_fr = [sentence_to_indices(sentence, fr_vocab) for sentence in tokenized_test_fr]
 
-test_loader = create_data_loader(test_eng, test_fr, eng_vocab, fr_vocab, batch_size=1)
+    test_eng = [sentence for sentence in test_eng if 128 >= len(sentence) >= 5]
+    test_fr = [sentence for sentence in test_fr if 128 >= len(sentence) >= 5]
 
-# Train the model
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = torch.load('transformer.pth')
+    print("Number of testidation samples:", len(test_eng))
 
-test(model, test_loader, fr_vocab, device=device)
+    test_loader = create_data_loader(test_eng, test_fr, eng_vocab, fr_vocab, batch_size=1)
+
+    # Train the model
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = torch.load(args.model)
+
+    test(model, test_loader, fr_vocab, device=device)
