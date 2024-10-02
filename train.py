@@ -1,4 +1,3 @@
-import re
 import torch
 import nltk
 import wandb
@@ -6,9 +5,10 @@ from tqdm import tqdm
 from encoder import Encoder
 from decoder import Decoder
 from nltk.tokenize import word_tokenize
-from torch.utils.data import DataLoader, TensorDataset
 from nltk.translate.bleu_score import sentence_bleu
 from rouge import Rouge
+
+from utils import clean_text, build_vocab, sentence_to_indices, create_data_loader
 
 nltk.download('punkt')
 
@@ -56,52 +56,6 @@ class Transformer(torch.nn.Module):
         output = output.transpose(1, 2)
         
         return output
-        
-    
-def clean_text(text):
-    text = text.lower()
-    text = re.sub(r'[^\w\s]', '', text)
-    return text
-
-def build_vocab(sentences):
-    vocab = {}
-    for sentence in sentences:
-        for word in sentence:
-            if word not in vocab:
-                vocab[word] = len(vocab)
-    
-    vocab['<UNK>'] = len(vocab)
-    vocab['<SOS>'] = len(vocab)
-    vocab['<EOS>'] = len(vocab)
-    vocab['<PAD>'] = len(vocab)
-    
-    return vocab
-
-def sentence_to_indices(sentence, vocab):
-    sentence2 = ['<SOS>'] + sentence + ['<EOS>']
-    return [vocab.get(word, vocab['<UNK>']) for word in sentence2]
-
-def create_data_loader(eng_sequences, fr_sequences, eng_vocab, fr_vocab, batch_size=32):    
-    max_len_eng = max([len(sentence) for sentence in eng_sequences])
-    max_len_fr = max([len(sentence) for sentence in fr_sequences])
-
-    print("Max length of English sentences:", max_len_eng)
-    print("Max length of French sentences:", max_len_fr)
-
-    eng_padded = []
-    fr_padded = []
-
-    for eng_seq, fr_seq in zip(eng_sequences, fr_sequences):
-        eng_padded.append(eng_seq + [eng_vocab['<PAD>']] * (128 - len(eng_seq)))
-        fr_padded.append(fr_seq + [fr_vocab['<PAD>']] * (128 - len(fr_seq)))
-
-    eng_tensor = torch.tensor(eng_padded)
-    fr_tensor = torch.tensor(fr_padded)
-
-    dataset = TensorDataset(eng_tensor, fr_tensor)
-    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
-
-    return data_loader
 
 def train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, device='cpu'):
     model.to(device)
@@ -229,72 +183,4 @@ model, avg_bleu, avg_rouge, train_loss, val_loss = train(model, train_loader, va
 print("BLEU Score:", avg_bleu)
 print("ROUGE Scores:", avg_rouge)
 
-# # hyperparameter tuning
-# wandb.init(project='transformer', entity='sarthakchittawar')
-
-# layers = [2, 4, 6]
-# heads = [4, 6, 8]
-# d_model = [128, 256, 512]
-# dropout = [0.1, 0.3, 0.5]
-
-# sweep_config = {
-#     'method': 'grid',
-#     'parameters': {
-#         'layers': {
-#             'values': [4, 6]
-#         },
-#         'heads': {
-#             'values': [4, 8]
-#         },
-#         'd_model': {
-#             'values': [256, 512]
-#         },
-#         'dropout': {
-#             'values': [0.1, 0.3]
-#         }
-#     }
-# }
-
-# sweep_id = wandb.sweep(sweep_config, project='transformer', entity='sarthakchittawar')
-
-# def train_sweep():
-#     config = wandb.config
-#     model = Transformer(config.d_model, config.heads, config.layers, eng_vocab, fr_vocab, dropout_rate=config.dropout, device=device)
-#     model, avg_bleu, avg_rouge, train_loss, val_loss = train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, device=device)
-#     return model, avg_bleu, avg_rouge, train_loss, val_loss
-
-# best_bleu = 0
-# best_rouge = 0
-# best_train_loss = 0
-# best_val_loss = 0
-# best_model = None
-
-# def sweep_iteration():
-#     global best_bleu, best_rouge, best_model, best_train_loss, best_val_loss
-#     model, avg_bleu, avg_rouge, train_loss, val_loss = train_sweep()
-#     if avg_bleu > best_bleu:
-#         best_bleu = avg_bleu
-#         best_rouge = avg_rouge
-#         best_train_loss = train_loss
-#         best_val_loss = val_loss
-#         best_model = model
-
-# wandb.agent(sweep_id, function=sweep_iteration)
-
-# wandb.finish()
-
-# print("Best Hyperparameters -")
-# print("Layers:", best_model.n_layers)
-# print("Heads:", best_model.n_heads)
-# print("Model Dimension:", best_model.d_model)
-# print("Dropout Rate:", best_model.dropout_rate)
-# print()
-
-# print("Best BLEU Score:", best_bleu)
-# print("Best ROUGE Scores:", best_rouge)
-# print("Train Loss:", best_train_loss)
-# print("Validation Loss:", best_val_loss)
-# print()
-
-# torch.save(best_model.state_dict(), 'transformer_model.pth')
-# print("Model saved as transformer_model.pth")
+torch.save(model, 'transformer_512_8_6.pth')

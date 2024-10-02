@@ -1,5 +1,52 @@
+import re
 import torch
 import numpy as np
+from torch.utils.data import DataLoader, TensorDataset
+
+def clean_text(text):
+    text = text.lower()
+    text = re.sub(r'[^\w\s]', '', text)
+    return text
+
+def build_vocab(sentences):
+    vocab = {}
+    for sentence in sentences:
+        for word in sentence:
+            if word not in vocab:
+                vocab[word] = len(vocab)
+    
+    vocab['<UNK>'] = len(vocab)
+    vocab['<SOS>'] = len(vocab)
+    vocab['<EOS>'] = len(vocab)
+    vocab['<PAD>'] = len(vocab)
+    
+    return vocab
+
+def sentence_to_indices(sentence, vocab):
+    sentence2 = ['<SOS>'] + sentence + ['<EOS>']
+    return [vocab.get(word, vocab['<UNK>']) for word in sentence2]
+
+def create_data_loader(eng_sequences, fr_sequences, eng_vocab, fr_vocab, batch_size=32):    
+    max_len_eng = max([len(sentence) for sentence in eng_sequences])
+    max_len_fr = max([len(sentence) for sentence in fr_sequences])
+
+    print("Max length of English sentences:", max_len_eng)
+    print("Max length of French sentences:", max_len_fr)
+
+    eng_padded = []
+    fr_padded = []
+
+    for eng_seq, fr_seq in zip(eng_sequences, fr_sequences):
+        eng_padded.append(eng_seq + [eng_vocab['<PAD>']] * (128 - len(eng_seq)))
+        fr_padded.append(fr_seq + [fr_vocab['<PAD>']] * (128 - len(fr_seq)))
+
+    eng_tensor = torch.tensor(eng_padded)
+    fr_tensor = torch.tensor(fr_padded)
+
+    dataset = TensorDataset(eng_tensor, fr_tensor)
+    data_loader = DataLoader(dataset, batch_size=batch_size, shuffle=True)
+
+    return data_loader
 
 class MultiHeadAttention(torch.nn.Module):
     def __init__(self, d_model, n_heads, query_dim, value_dim):
