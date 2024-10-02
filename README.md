@@ -12,13 +12,6 @@
 
 * Recent advances include **learnable positional embeddings** (trainable vectors) and **relative positional encodings**, which model relationships between token positions dynamically, as opposed to the fixed patterns in traditional sinusoidal encodings. These approaches offer more flexibility and adaptability to various tasks.
 
-parser.add_argument('--d_model', type=int, default=512)
-    parser.add_argument('--n_heads', type=int, default=4)
-    parser.add_argument('--n_layers', type=int, default=2)
-    parser.add_argument('--dropout_rate', type=float, default=0.1)
-    parser.add_argument('--device', type=str, default='cpu')
-    parser.add_argument('--index', type=int, default=0)
-
 ## Hyperparameter Tuning
 
 1. model_dim = 512, 8 heads, 6 layers, dropout=0.1 : BLEU = 0.1374, loss = 0.55215
