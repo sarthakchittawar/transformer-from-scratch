@@ -113,10 +113,25 @@ if __name__ == '__main__':
         eng = eng.to(device)
         fr = fr.to(device)
 
-        output = model(eng, torch.tensor([[fr_vocab['<SOS>']]], device=device))
-        output = torch.argmax(output, dim=-1)
-        translated = [idx2word[idx.item()] for idx in output[0]]
+        decoder_input = torch.tensor([fr_vocab['<SOS>']], device=device).unsqueeze(0)
+        for i in range(128):
+            output = model(eng, decoder_input)
+            output = output.argmax(dim=-1)
+            decoder_input = torch.cat((decoder_input, output[:, -1].unsqueeze(0)), dim=1)
+            if output[:, -1].item() == fr_vocab['<EOS>']:
+                break
 
-        print("English:", " ".join([idx2word[idx.item()] for idx in eng[0]]))
-        print("French:", " ".join([idx2word[idx.item()] for idx in fr[0]]))
-        print("Translated:", " ".join(translated))
+        # calculate the BLEU score
+        fr = fr.squeeze(0).cpu().numpy()
+        decoder_input = decoder_input.squeeze(0).cpu().numpy()
+        fr = [idx2word[idx] for idx in fr]
+        decoder_input = [idx2word[idx] for idx in decoder_input]
+
+        bleu_score = sentence_bleu([fr], decoder_input)
+        bleu_scores.append(bleu_score)
+
+        print("Test sentence:", ' '.join([idx2word[idx] for idx in eng.squeeze(0).cpu().numpy()]))
+        print("Actual translation:", ' '.join([idx2word[idx] for idx in fr]))
+        print("Predicted translation:", ' '.join([idx2word[idx] for idx in decoder_input]))
+        print("BLEU score:", bleu_score)
+        print()
