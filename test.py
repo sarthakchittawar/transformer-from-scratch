@@ -113,10 +113,9 @@ if __name__ == '__main__':
         eng = eng.to(device)
         fr = fr.to(device)
 
-        decoder_input = [fr_vocab['<PAD>'] for _ in range(128)]
-        decoder_input[0] = fr_vocab['<SOS>']
-        decoder_input = torch.tensor(decoder_input).unsqueeze(0).to(device)
+        decoder_input = torch.tensor([fr_vocab['<SOS>']], device=device).unsqueeze(0)
         for i in range(128):
+            print(eng, decoder_input)
             output = model(eng, decoder_input)
             output = output.argmax(dim=-1)
             decoder_input = torch.cat((decoder_input, output[:, -1].unsqueeze(0)), dim=1)
