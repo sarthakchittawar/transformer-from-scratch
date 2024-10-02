@@ -119,6 +119,8 @@ if __name__ == '__main__':
 
         fr = fr.squeeze(0).tolist()
         fr = fr[1:] # remove <SOS> token
+        output = [idx2word.get(idx, '<UNK>') for idx in output]
+        print(output)
         output = output[:output.index(fr_vocab['<EOS>'])] # remove tokens after <EOS> token
 
         output = [idx2word.get(idx, '<UNK>') for idx in output]
