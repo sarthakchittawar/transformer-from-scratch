@@ -1,6 +1,7 @@
 import torch
 import nltk
 import wandb
+import argparse
 from tqdm import tqdm
 from encoder import Encoder
 from decoder import Decoder
@@ -132,6 +133,8 @@ if __name__ == '__main__':
     parser.add_argument('--n_heads', type=int, default=8)
     parser.add_argument('--n_layers', type=int, default=6)
     parser.add_argument('--dropout_rate', type=float, default=0.1)
+    parser.add_argument('--device', type=str, default='cpu')
+    parser.add_argument('--index', type=int, default=0)
 
     args = parser.parse_args()
 
@@ -184,7 +187,7 @@ if __name__ == '__main__':
     val_loader = create_data_loader(val_eng, val_fr, eng_vocab, fr_vocab, batch_size=64)
 
     # Train the model
-    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    device = torch.device(args.device)
     model = Transformer(args.d_model, args.n_heads, args.n_layers, eng_vocab, fr_vocab, dropout_rate=args.dropout_rate, device=device)
 
     wandb.init(project='transformer', entity='sarthakchittawar', config={'layers': args.n_layers, 'heads': args.n_heads, 'd_model': args.d_model, 'dropout_rate': args.dropout_rate})
@@ -192,4 +195,4 @@ if __name__ == '__main__':
     print("BLEU Score:", avg_bleu)
     print("ROUGE Scores:", avg_rouge)
 
-    torch.save(model, f'transformer_{args.d_model}_{args.n_heads}_{args.n_layers}.pth')
+    torch.save(model, f'transformer_{args.index}.pth')
