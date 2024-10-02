@@ -55,42 +55,6 @@ class Transformer(torch.nn.Module):
         
         return output
 
-def test(model, test_loader, fr_vocab, device='cpu'):
-    model.to(device)
-    criterion = torch.nn.CrossEntropyLoss(ignore_index=fr_vocab['<PAD>'])
-
-    fr_vocab_inv = {idx: word for word, idx in fr_vocab.items()}
-        
-    model.eval()
-    with torch.no_grad():
-        total_loss = 0
-        bleu_scores = []
-        
-        for _, (eng, fr) in enumerate(test_loader):
-            eng, fr = eng.to(device), fr.to(device)
-            output = model(eng, fr)
-            loss = criterion(output, fr)
-            total_loss += loss.item()
-
-            # Calculate BLEU and ROUGE scores
-            output_indices = output.argmax(dim=1).cpu().numpy()
-            fr_indices = fr.cpu().numpy()
-            for j in range(len(output_indices)):
-                pred_sentence = [fr_vocab_inv.get(idx, '<UNK>') for idx in output_indices[j] if idx != fr_vocab['<PAD>']]
-                true_sentence = [fr_vocab_inv.get(idx, '<UNK>') for idx in fr_indices[j] if idx != fr_vocab['<PAD>']]
-                bleu_scores.append(sentence_bleu([true_sentence], pred_sentence))
-
-                print(f'Predicted: {" ".join(pred_sentence)}')
-                print(f'True: {" ".join(true_sentence)}')
-                print(f'BLEU Score: {sentence_bleu([true_sentence], pred_sentence)}')
-                print()
-
-        avg_bleu = sum(bleu_scores) / len(bleu_scores)
-
-        print(f'Test Loss: {total_loss / len(test_loader)}, Avg BLEU Score: {avg_bleu}')
-
-    return total_loss / len(test_loader), avg_bleu
-
 if __name__ == '__main__':
 
     parser = argparse.ArgumentParser()
@@ -140,4 +104,27 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = torch.load(args.model)
 
-    test(model, test_loader, fr_vocab, device=device)
+    # translate the test sentences until EOS token is generated, also calculate the BLEU score (start with <SOS> token)
+    model.eval()
+    bleu_scores = []
+    for i, (eng, fr) in enumerate(test_loader):
+        eng = eng.to(device)
+        fr = fr.to(device)
+
+        output = model(eng, fr)
+        output = torch.argmax(output, dim=2)
+        output = output.squeeze(0).tolist()
+
+        fr = fr.squeeze(0).tolist()
+        fr = fr[1:] # remove <SOS> token
+        output = output[:output.index(fr_vocab['<EOS>'])] # remove tokens after <EOS> token
+
+        bleu_score = sentence_bleu([fr], output)
+        bleu_scores.append(bleu_score)
+
+        print("Test Sample:", i + 1)
+        print("English:", ' '.join([list(eng_vocab.keys())[idx] for idx in eng.squeeze(0).tolist()]))
+        print("French:", ' '.join([list(fr_vocab.keys())[idx] for idx in fr]))
+        print("Translated French:", ' '.join([list(fr_vocab.keys())[idx] for idx in output]))
+        print("BLEU Score:", bleu_score)
+        print()
