@@ -113,25 +113,10 @@ if __name__ == '__main__':
         eng = eng.to(device)
         fr = fr.to(device)
 
-        output = model(eng, fr)
-        output = torch.argmax(output, dim=2)
-        output = output.squeeze(0).tolist()
+        output = model(eng, torch.tensor([[fr_vocab['<SOS>']]], device=device))
+        output = torch.argmax(output, dim=-1)
+        translated = [idx2word[idx.item()] for idx in output[0]]
 
-        fr = fr.squeeze(0).tolist()
-        fr = fr[1:] # remove <SOS> token
-        output = [idx2word.get(idx, '<UNK>') for idx in output]
-        print(output)
-        output = output[:output.index(fr_vocab['<EOS>'])] # remove tokens after <EOS> token
-
-        output = [idx2word.get(idx, '<UNK>') for idx in output]
-        fr = [idx2word.get(idx, '<UNK>') for idx in fr]
-
-        bleu_score = sentence_bleu([fr], output)
-        bleu_scores.append(bleu_score)
-
-        print("Test Sample:", i + 1)
-        print("English:", ' '.join([list(eng_vocab.keys())[idx] for idx in eng.squeeze(0).tolist()]))
-        print("French:", ' '.join([list(fr_vocab.keys())[idx] for idx in fr]))
-        print("Translated French:", ' '.join([list(fr_vocab.keys())[idx] for idx in output]))
-        print("BLEU Score:", bleu_score)
-        print()
+        print("English:", " ".join([idx2word[idx.item()] for idx in eng[0]]))
+        print("French:", " ".join([idx2word[idx.item()] for idx in fr[0]]))
+        print("Translated:", " ".join(translated))
