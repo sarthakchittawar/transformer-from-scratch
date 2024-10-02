@@ -187,7 +187,7 @@ if __name__ == '__main__':
     val_loader = create_data_loader(val_eng, val_fr, eng_vocab, fr_vocab, batch_size=64)
 
     # Train the model
-    device = torch.device(args.device)
+    device = "cuda" if torch.cuda.is_available() else "cpu"
     model = Transformer(args.d_model, args.n_heads, args.n_layers, eng_vocab, fr_vocab, dropout_rate=args.dropout_rate, device=device)
 
     wandb.init(project='transformer', entity='sarthakchittawar', config={'layers': args.n_layers, 'heads': args.n_heads, 'd_model': args.d_model, 'dropout_rate': args.dropout_rate})
