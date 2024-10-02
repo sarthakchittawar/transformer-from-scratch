@@ -156,7 +156,21 @@ def train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, d
 
             print(f'Epoch: {epoch+1}, Validation Loss: {total_loss / len(val_loader)}, BLEU Score: {avg_bleu}, ROUGE Scores: {avg_rouge}')
 
-        wandb.log({'train_loss': train_loss, 'val_loss': total_loss / len(val_loader), 'bleu': avg_bleu, 'rouge-1': avg_rouge['rouge-1'], 'rouge-2': avg_rouge['rouge-2'], 'rouge-l': avg_rouge['rouge-l'], 'epoch': epoch+1, 'num_layers': model.n_layers, 'num_heads': model.n_heads, 'd_model': model.d_model, 'dropout_rate': model.dropout_rate})
+            if wandb.run:  
+                wandb.log({
+                    'num_layers': model.n_layers,
+                    'num_heads': model.n_heads,
+                    'd_model': model.d_model,
+                    'dropout_rate': model.dropout_rate,
+                    'train_loss': train_loss,
+                    'val_loss': total_loss / len(val_loader),
+                    'bleu_score': avg_bleu,
+                    'rouge-1': avg_rouge['rouge-1'],
+                    'rouge-2': avg_rouge['rouge-2'],
+                    'rouge-l': avg_rouge['rouge-l'],
+                    'epoch': epoch
+                })
+    
 
     return model, avg_bleu, avg_rouge, train_loss, total_loss / len(val_loader)
     
@@ -187,9 +201,6 @@ tokenized_train_fr = [word_tokenize(clean_text(sentence), language="french") for
 tokenized_val_eng = [word_tokenize(clean_text(sentence)) for sentence in eng_val_lines]
 tokenized_val_fr = [word_tokenize(clean_text(sentence), language="french") for sentence in fr_val_lines]
 
-print(tokenized_train_eng[87])
-print(tokenized_train_fr[87])
-
 # Build the vocabulary
 eng_vocab = build_vocab(tokenized_train_eng)
 fr_vocab = build_vocab(tokenized_train_fr)
@@ -215,51 +226,79 @@ val_loader = create_data_loader(val_eng, val_fr, eng_vocab, fr_vocab, batch_size
 
 # Train the model
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-# model = Transformer(512, 8, 6, eng_vocab, fr_vocab, device=device)
-# model, avg_bleu, avg_rouge, train_loss, val_loss = train(model, train_loader, val_loader, fr_vocab, num_epochs=2, lr=0.0001, device=device)
-# print("BLEU Score:", avg_bleu)
-# print("ROUGE Scores:", avg_rouge)
-
-# hyperparameter tuning
-layers = [2, 4, 6]
-heads = [4, 6, 8]
-d_model = [128, 256, 512]
-dropout = [0.1, 0.3, 0.5]
+model = Transformer(512, 8, 6, eng_vocab, fr_vocab, device=device)
 
 wandb.init(project='transformer', entity='sarthakchittawar')
+model, avg_bleu, avg_rouge, train_loss, val_loss = train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, device=device)
+print("BLEU Score:", avg_bleu)
+print("ROUGE Scores:", avg_rouge)
 
-best_bleu = 0
-best_rouge = 0
-best_model = None
+# # hyperparameter tuning
+# wandb.init(project='transformer', entity='sarthakchittawar')
 
-for layer in layers:
-    for head in heads:
-        for model_dim in d_model:
-            for drop in dropout:
-                model = Transformer(model_dim, head, layer, eng_vocab, fr_vocab, dropout_rate=drop, device=device)
-                model, avg_bleu, avg_rouge, train_loss, val_loss = train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, device=device)
-                # rouge_1 = avg_rouge['rouge-1']
-                # rouge_2 = avg_rouge['rouge-2']
-                # rouge_l = avg_rouge['rouge-l']
-                # wandb.log({'layers': layer, 'heads': head, 'd_model': model_dim, 'dropout': drop, 'train_loss': train_loss, 'val_loss': val_loss, 'bleu': avg_bleu, 'rouge-1': rouge_1, 'rouge-2': rouge_2, 'rouge-l': rouge_l})
+# layers = [2, 4, 6]
+# heads = [4, 6, 8]
+# d_model = [128, 256, 512]
+# dropout = [0.1, 0.3, 0.5]
 
-                if avg_bleu > best_bleu:
-                    best_bleu = avg_bleu
-                    best_rouge = avg_rouge
-                    best_model = model
+# sweep_config = {
+#     'method': 'grid',
+#     'parameters': {
+#         'layers': {
+#             'values': [4, 6]
+#         },
+#         'heads': {
+#             'values': [4, 8]
+#         },
+#         'd_model': {
+#             'values': [256, 512]
+#         },
+#         'dropout': {
+#             'values': [0.1, 0.3]
+#         }
+#     }
+# }
 
-wandb.finish()
+# sweep_id = wandb.sweep(sweep_config, project='transformer', entity='sarthakchittawar')
 
-# Save the best model
-torch.save(best_model.state_dict(), 'transformer_model.pth')
+# def train_sweep():
+#     config = wandb.config
+#     model = Transformer(config.d_model, config.heads, config.layers, eng_vocab, fr_vocab, dropout_rate=config.dropout, device=device)
+#     model, avg_bleu, avg_rouge, train_loss, val_loss = train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, device=device)
+#     return model, avg_bleu, avg_rouge, train_loss, val_loss
 
-print("Best Hyperparameters -")
-print("Layers:", best_model.encoder.n_layers)
-print("Heads:", best_model.encoder.n_heads)
-print("Model Dimension:", best_model.encoder.d_model)
-print("Dropout Rate:", best_model.encoder.dropout_rate)
-print()
+# best_bleu = 0
+# best_rouge = 0
+# best_train_loss = 0
+# best_val_loss = 0
+# best_model = None
 
-print("Best BLEU Score:", best_bleu)
-print("Best ROUGE Scores:", best_rouge)
-print("Model saved as transformer_model.pth")
+# def sweep_iteration():
+#     global best_bleu, best_rouge, best_model, best_train_loss, best_val_loss
+#     model, avg_bleu, avg_rouge, train_loss, val_loss = train_sweep()
+#     if avg_bleu > best_bleu:
+#         best_bleu = avg_bleu
+#         best_rouge = avg_rouge
+#         best_train_loss = train_loss
+#         best_val_loss = val_loss
+#         best_model = model
+
+# wandb.agent(sweep_id, function=sweep_iteration)
+
+# wandb.finish()
+
+# print("Best Hyperparameters -")
+# print("Layers:", best_model.n_layers)
+# print("Heads:", best_model.n_heads)
+# print("Model Dimension:", best_model.d_model)
+# print("Dropout Rate:", best_model.dropout_rate)
+# print()
+
+# print("Best BLEU Score:", best_bleu)
+# print("Best ROUGE Scores:", best_rouge)
+# print("Train Loss:", best_train_loss)
+# print("Validation Loss:", best_val_loss)
+# print()
+
+# torch.save(best_model.state_dict(), 'transformer_model.pth')
+# print("Model saved as transformer_model.pth")
