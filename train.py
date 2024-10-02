@@ -158,10 +158,6 @@ def train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, d
 
             if wandb.run:  
                 wandb.log({
-                    'num_layers': model.n_layers,
-                    'num_heads': model.n_heads,
-                    'd_model': model.d_model,
-                    'dropout_rate': model.dropout_rate,
                     'train_loss': train_loss,
                     'val_loss': total_loss / len(val_loader),
                     'bleu_score': avg_bleu,
@@ -228,7 +224,7 @@ val_loader = create_data_loader(val_eng, val_fr, eng_vocab, fr_vocab, batch_size
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 model = Transformer(512, 8, 6, eng_vocab, fr_vocab, device=device)
 
-wandb.init(project='transformer', entity='sarthakchittawar')
+wandb.init(project='transformer', entity='sarthakchittawar', config={'layers': 6, 'heads': 8, 'd_model': 512, 'dropout': 0.1})
 model, avg_bleu, avg_rouge, train_loss, val_loss = train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, device=device)
 print("BLEU Score:", avg_bleu)
 print("ROUGE Scores:", avg_rouge)
