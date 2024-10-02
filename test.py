@@ -104,6 +104,8 @@ if __name__ == '__main__':
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     model = torch.load(args.model)
 
+    idx2word = {idx: word for word, idx in fr_vocab.items()}
+
     # translate the test sentences until EOS token is generated, also calculate the BLEU score (start with <SOS> token)
     model.eval()
     bleu_scores = []
@@ -118,6 +120,9 @@ if __name__ == '__main__':
         fr = fr.squeeze(0).tolist()
         fr = fr[1:] # remove <SOS> token
         output = output[:output.index(fr_vocab['<EOS>'])] # remove tokens after <EOS> token
+
+        output = [idx2word.get(idx, '<UNK>') for idx in output]
+        fr = [idx2word.get(idx, '<UNK>') for idx in fr]
 
         bleu_score = sentence_bleu([fr], output)
         bleu_scores.append(bleu_score)
