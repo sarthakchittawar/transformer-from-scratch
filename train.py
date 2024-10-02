@@ -126,61 +126,70 @@ def train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, d
     
 # unit testing for Encoder & Decoder
 
-eng_train = open('ted-talks-corpus/train.en', 'r')
-fr_train = open('ted-talks-corpus/train.fr', 'r')
-eng_val = open('ted-talks-corpus/dev.en', 'r')
-fr_val = open('ted-talks-corpus/dev.fr', 'r')
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('--d_model', type=int, default=512)
+    parser.add_argument('--n_heads', type=int, default=8)
+    parser.add_argument('--n_layers', type=int, default=6)
+    parser.add_argument('--dropout_rate', type=float, default=0.1)
 
-eng_train_lines = eng_train.readlines()
-fr_train_lines = fr_train.readlines()
+    args = parser.parse_args()
 
-eng_val_lines = eng_val.readlines()
-fr_val_lines = fr_val.readlines()
+    eng_train = open('ted-talks-corpus/train.en', 'r')
+    fr_train = open('ted-talks-corpus/train.fr', 'r')
+    eng_val = open('ted-talks-corpus/dev.en', 'r')
+    fr_val = open('ted-talks-corpus/dev.fr', 'r')
 
-eng_train.close()
-fr_train.close()
+    eng_train_lines = eng_train.readlines()
+    fr_train_lines = fr_train.readlines()
 
-# Tokenize the English and French sentences
-eng_train_lines = [line.strip() for line in eng_train_lines]
-fr_train_lines = [line.strip() for line in fr_train_lines]
-eng_val_lines = [line.strip() for line in eng_val_lines]
-fr_val_lines = [line.strip() for line in fr_val_lines]
+    eng_val_lines = eng_val.readlines()
+    fr_val_lines = fr_val.readlines()
 
-tokenized_train_eng = [word_tokenize(clean_text(sentence)) for sentence in eng_train_lines]
-tokenized_train_fr = [word_tokenize(clean_text(sentence), language="french") for sentence in fr_train_lines]
-tokenized_val_eng = [word_tokenize(clean_text(sentence)) for sentence in eng_val_lines]
-tokenized_val_fr = [word_tokenize(clean_text(sentence), language="french") for sentence in fr_val_lines]
+    eng_train.close()
+    fr_train.close()
 
-# Build the vocabulary
-eng_vocab = build_vocab(tokenized_train_eng)
-fr_vocab = build_vocab(tokenized_train_fr)
+    # Tokenize the English and French sentences
+    eng_train_lines = [line.strip() for line in eng_train_lines]
+    fr_train_lines = [line.strip() for line in fr_train_lines]
+    eng_val_lines = [line.strip() for line in eng_val_lines]
+    fr_val_lines = [line.strip() for line in fr_val_lines]
 
-# Convert the sentences to indices
-train_eng = [sentence_to_indices(sentence, eng_vocab) for sentence in tokenized_train_eng]
-train_fr = [sentence_to_indices(sentence, fr_vocab) for sentence in tokenized_train_fr]
+    tokenized_train_eng = [word_tokenize(clean_text(sentence)) for sentence in eng_train_lines]
+    tokenized_train_fr = [word_tokenize(clean_text(sentence), language="french") for sentence in fr_train_lines]
+    tokenized_val_eng = [word_tokenize(clean_text(sentence)) for sentence in eng_val_lines]
+    tokenized_val_fr = [word_tokenize(clean_text(sentence), language="french") for sentence in fr_val_lines]
 
-val_eng = [sentence_to_indices(sentence, eng_vocab) for sentence in tokenized_val_eng]
-val_fr = [sentence_to_indices(sentence, fr_vocab) for sentence in tokenized_val_fr]
+    # Build the vocabulary
+    eng_vocab = build_vocab(tokenized_train_eng)
+    fr_vocab = build_vocab(tokenized_train_fr)
 
-train_eng = [sentence for sentence in train_eng if 128 >= len(sentence) >= 5]
-train_fr = [sentence for sentence in train_fr if 128 >= len(sentence) >= 5]
-val_eng = [sentence for sentence in val_eng if 128 >= len(sentence) >= 5]
-val_fr = [sentence for sentence in val_fr if 128 >= len(sentence) >= 5]
+    # Convert the sentences to indices
+    train_eng = [sentence_to_indices(sentence, eng_vocab) for sentence in tokenized_train_eng]
+    train_fr = [sentence_to_indices(sentence, fr_vocab) for sentence in tokenized_train_fr]
 
-print("Number of training samples:", len(train_eng))
-print("Number of validation samples:", len(val_eng))
+    val_eng = [sentence_to_indices(sentence, eng_vocab) for sentence in tokenized_val_eng]
+    val_fr = [sentence_to_indices(sentence, fr_vocab) for sentence in tokenized_val_fr]
 
-# Create the data loaders
-train_loader = create_data_loader(train_eng, train_fr, eng_vocab, fr_vocab, batch_size=64)
-val_loader = create_data_loader(val_eng, val_fr, eng_vocab, fr_vocab, batch_size=64)
+    train_eng = [sentence for sentence in train_eng if 128 >= len(sentence) >= 5]
+    train_fr = [sentence for sentence in train_fr if 128 >= len(sentence) >= 5]
+    val_eng = [sentence for sentence in val_eng if 128 >= len(sentence) >= 5]
+    val_fr = [sentence for sentence in val_fr if 128 >= len(sentence) >= 5]
 
-# Train the model
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-model = Transformer(512, 8, 6, eng_vocab, fr_vocab, device=device)
+    print("Number of training samples:", len(train_eng))
+    print("Number of validation samples:", len(val_eng))
 
-wandb.init(project='transformer', entity='sarthakchittawar', config={'layers': 6, 'heads': 8, 'd_model': 512, 'dropout': 0.1})
-model, avg_bleu, avg_rouge, train_loss, val_loss = train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, device=device)
-print("BLEU Score:", avg_bleu)
-print("ROUGE Scores:", avg_rouge)
+    # Create the data loaders
+    train_loader = create_data_loader(train_eng, train_fr, eng_vocab, fr_vocab, batch_size=64)
+    val_loader = create_data_loader(val_eng, val_fr, eng_vocab, fr_vocab, batch_size=64)
 
-torch.save(model, 'transformer_512_8_6.pth')
+    # Train the model
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+    model = Transformer(args.d_model, args.n_heads, args.n_layers, eng_vocab, fr_vocab, dropout_rate=args.dropout_rate, device=device)
+
+    wandb.init(project='transformer', entity='sarthakchittawar', config={'layers': args.n_layers, 'heads': args.n_heads, 'd_model': args.d_model, 'dropout_rate': args.dropout_rate})
+    model, avg_bleu, avg_rouge, train_loss, val_loss = train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, device=device)
+    print("BLEU Score:", avg_bleu)
+    print("ROUGE Scores:", avg_rouge)
+
+    torch.save(model, f'transformer_{args.d_model}_{args.n_heads}_{args.n_layers}.pth')
