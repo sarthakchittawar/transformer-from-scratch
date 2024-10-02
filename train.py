@@ -119,7 +119,7 @@ def train(model, train_loader, val_loader, fr_vocab, num_epochs=10, lr=0.0001, d
                     'rouge-1': avg_rouge['rouge-1'],
                     'rouge-2': avg_rouge['rouge-2'],
                     'rouge-l': avg_rouge['rouge-l'],
-                    'epoch': epoch
+                    'epoch': epoch+1
                 })
     
 
