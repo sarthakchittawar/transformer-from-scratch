@@ -1,6 +1,6 @@
 # Running Instructions
-* Training - `python train.py (--args)`
-* Testing - `python test.py (--args)`
+* Training - `python train.py [--d_model dimension][--n_heads num_heads][--n_layers num_layers][--dropout_rate dropout][--device device]`
+* Testing - `python test.py [--d_model dimension][--n_heads num_heads][--n_layers num_layers][--dropout_rate dropout][--device device]`
 
 ## Answers to the Theory Questions
 
